@@ -1,0 +1,134 @@
+<#
+================================================================================
+SCRIPT INFORMATION
+================================================================================
+Description     : Retrieve ServiceNow incident data using incident sys_id
+Author          : mpauwels
+Created Date    : 08.09.2025
+Last Updated    : 09.09.2025
+Version         : 1.1
+Requirements    : PowerShell 5.1+, ServiceNow OAuth credentials
+================================================================================
+#>
+#Available Instances
+#$instance = "https://heidelbergmaterialsdev.service-now.com" #DEV
+$instance = "https://heidelbergmaterialstest.service-now.com" #TEST
+#$instance = "https://heidelbergmaterialsprod.service-now.com" #PROD
+
+
+$clientId = "XXXYourClientIDXXX"
+$clientSecret = "XXXYourClientSecretXXX"
+$tokenUrl = "$instance/oauth_token.do"
+
+$sysId = "4ce60676ebbb62501d59f9e4cad0cd73"  # <-- Enter your Sys_ID
+
+function Get-AccessToken {
+    $body = @{
+        grant_type = "client_credentials"
+        client_id = $clientId
+        client_secret = $clientSecret
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $tokenUrl -Body $body -ContentType "application/x-www-form-urlencoded"
+        return $response.access_token
+    }
+    catch {
+        Write-Error "Failed to obtain access token: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Get-IncidentBySysId {
+    param (
+        [string]$accessToken,
+        [string]$sysId
+    )
+
+    #$uri = "$instance/api/now/table/incident/$sysId"
+    $uri = "$instance/api/now/table/incident?sysparm_query=sys_id=$sysId&sysparm_display_value=true"
+    $headers = @{
+        Authorization = "Bearer $accessToken"
+        Accept = "application/json"
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
+        return $response.result
+    }
+    catch {
+        Write-Error "Failed to retrieve incident: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+# Main execution
+Write-Host "Getting access token..." -ForegroundColor Yellow
+$token = Get-AccessToken
+
+if ($token) {
+    Write-Host "Access token obtained successfully!" -ForegroundColor Green
+    
+
+    
+    Write-Host "Retrieving incident with Sys_ID: $sysId" -ForegroundColor Yellow
+    $incidentData = Get-IncidentBySysId -accessToken $token -sysId $sysId
+
+    if ($incidentData) {
+        Write-Host "`nIncident Data for Sys_ID: $sysId" -ForegroundColor Green
+        #Write-Host "=" * 60 -ForegroundColor Cyan
+        
+        Write-Host "Number: $($incidentData.number)" -ForegroundColor White
+        Write-Host "Sys_ID: $($incidentData.sys_id)" -ForegroundColor White
+        Write-Host "State: $($incidentData.state)" -ForegroundColor White
+        Write-Host "Short Description: $($incidentData.short_description)" -ForegroundColor White
+        Write-Host "Description: $($incidentData.description)" -ForegroundColor White
+        Write-Host "Caller: $($incidentData.caller_id.display_value)" -ForegroundColor White
+        Write-Host "Service Offering: $($incidentData.service_offering.display_value)" -ForegroundColor White
+        Write-Host "Category: $($incidentData.category)" -ForegroundColor White
+        Write-Host "Subcategory: $($incidentData.subcategory)" -ForegroundColor White
+        Write-Host "Impact: $($incidentData.impact)" -ForegroundColor White
+        Write-host "Urgency: $($incidentData.urgency)" -ForegroundColor White
+        Write-Host "Priority: $($incidentData.priority)" -ForegroundColor White
+        Write-Host "Assignment Group: $($incidentData.assignment_group.display_value)" -ForegroundColor White
+        Write-Host "Assigned To: $($incidentData.assigned_to.display_value)" -ForegroundColor White
+        Write-Host "Created: $($incidentData.sys_created_on)" -ForegroundColor White
+        Write-Host "Updated: $($incidentData.sys_updated_on)" -ForegroundColor White
+        
+    } else {
+        Write-Host "No incident found with Sys_ID: $sysId" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Failed to obtain access token!" -ForegroundColor Red
+}
+
+<#
+================================================================================
+CURRENT ISSUES
+================================================================================
+- [FIXED] No information displayed for the below fields:
+    - Caller
+    - Service Offering
+    - Category
+    - Subcategory
+    - Assignment group
+    - Assigned To
+================================================================================
+CHANGE LOG
+================================================================================
+Version 1.0 - 08.09.2025 - mpauwels
+    - Initial script creation
+    - Added OAuth authentication
+    - Added incident retrieval by number
+    - Added error handling and colored output
+
+Version 1.1 - 09.09.2025 - mpauwels
+    - Fixed issue with not displaying values for the below fields:
+        - Caller
+        - Service Offering
+        - Category
+        - Subcategory
+        - Assignment group
+        - Assigned To
+================================================================================
+#>
